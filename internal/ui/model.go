@@ -54,6 +54,9 @@ type Model struct {
 	running    bool
 	promptItem *model.PaletteItem
 	promptVal  string
+	output     string // result view text (plugin action stdout); "" = list mode
+	outputTitle string
+	outputScroll int
 	width      int
 	height     int
 	closed     bool
@@ -101,7 +104,29 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyMsg:
 		key := msg.String()
 		if contains(m.keys.Back, key) {
-			if m.promptItem != nil {
+			if m.output != "" {
+				m.output, m.outputTitle, m.outputScroll = "", "", 0
+				return m, nil
+			}
+		if m.output != "" {
+			// Result view: scroll output, esc backs out (handled above).
+			lines := strings.Count(m.output, "\n") + 1
+			span := max(1, m.height-4)
+			switch {
+			case key == "up" || key == "ctrl+p":
+				if m.outputScroll > 0 {
+					m.outputScroll--
+				}
+				return m, nil
+			case key == "down" || key == "ctrl+n":
+				if m.outputScroll < max(0, lines-span) {
+					m.outputScroll++
+				}
+				return m, nil
+			}
+			return m, nil
+		}
+		if m.promptItem != nil {
 				m.promptItem = nil
 				m.promptVal = ""
 				m.status = ""
@@ -169,11 +194,7 @@ func (m Model) runSelected() (tea.Model, tea.Cmd) {
 		m.running = true
 		res := m.exec(item, m.promptVal)
 		m.running = false
-		if res.OK {
-			return m, func() tea.Msg { return closeMsg{true} }
-		}
-		m.status = res.Message
-		return m, nil
+		return m.finishRun(res)
 	}
 	if len(vis) == 0 {
 		m.status = "No commands match your search."
@@ -195,6 +216,21 @@ func (m Model) runSelected() (tea.Model, tea.Cmd) {
 	m.running = true
 	res := m.exec(item, "")
 	m.running = false
+	return m.finishRun(res)
+}
+
+// finishRun routes a result: output opens the scrollable result view,
+// clean success closes the palette, anything else is a status line.
+func (m Model) finishRun(res model.CommandResult) (tea.Model, tea.Cmd) {
+	if res.Output != "" {
+		m.output, m.outputTitle, m.outputScroll = res.Output, res.Title, 0
+		m.status = res.Message
+		m.promptItem = nil
+		m.promptVal = ""
+		m.input.SetValue(m.query)
+		m.input.Placeholder = "Search commands"
+		return m, nil
+	}
 	if res.OK {
 		return m, func() tea.Msg { return closeMsg{true} }
 	}
@@ -214,6 +250,24 @@ func (m Model) View() string {
 		m.input.View(),
 		"",
 	)
+
+	if m.output != "" {
+		all := strings.Split(m.output, "\n")
+		span := max(1, m.height-5-(boolToInt(m.status != "")))
+		start := min(m.outputScroll, max(0, len(all)-span))
+		m.outputScroll = start
+		for _, ln := range all[start:min(len(all), start+span)] {
+			lines = append(lines, m.styles.Text.Render(ln))
+		}
+		if m.status != "" {
+			lines = append(lines, m.styles.Accent.Render(oneLine(m.status, max(20, m.width-4))))
+		}
+		footer := m.styles.Footer.Render(
+			m.styles.Accent.Bold(true).Render("esc") + m.styles.FooterText.Render(" back   ") +
+				m.styles.Accent.Bold(true).Render("↑/↓") + m.styles.FooterText.Render(" scroll"))
+		lines = append(lines, strings.Repeat("\n", max(0, m.height-len(lines)-1)), footer)
+		return strings.Join(lines, "\n")
+	}
 
 	if m.promptItem != nil {
 		lines = append(lines, m.styles.Muted.Render(m.promptItem.Description))
@@ -320,4 +374,18 @@ func max(a, b int) int {
 		return a
 	}
 	return b
+}
+
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
+}
+
+func boolToInt(b bool) int {
+	if b {
+		return 1
+	}
+	return 0
 }

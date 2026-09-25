@@ -76,4 +76,8 @@ type PaletteItem struct {
 type CommandResult struct {
 	OK      bool
 	Message string
+	// Output is captured stdout worth showing (e.g. plugin action results).
+	// Non-empty Output with OK means "keep the palette open on a result view".
+	Output string
+	Title  string
 }
