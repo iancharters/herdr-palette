@@ -3,6 +3,8 @@
 Fuzzy command palette for [Herdr](https://herdr.dev), rebuilt in Go on
 [Bubble Tea](https://github.com/charmbracelet/bubbletea) + Bubbles + Lip Gloss.
 
+![demo](docs/demo.gif)
+
 * Hardcoded built-in catalog (Workspace/Tabs/Panes/Worktrees/Agents/Herdr),
   with `[keys]` remaps honored from `config.toml`.
 * Auto-discovery of installed plugin actions via `herdr plugin action list`,
