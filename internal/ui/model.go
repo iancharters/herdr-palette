@@ -8,7 +8,6 @@ import (
 
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
 	"github.com/iancharters/herdr-palette/internal/model"
 	"github.com/iancharters/herdr-palette/internal/theme"
 	"github.com/iancharters/herdr-palette/internal/viewport"
@@ -203,41 +202,50 @@ func (m Model) runSelected() (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// View renders heading, input, grouped list, status, and footer.
+// View renders heading, input, grouped list, status, and a bottom-pinned footer.
 func (m Model) View() string {
-	var b strings.Builder
+	lines := []string{}
 	title := "Commands"
 	if m.promptItem != nil {
 		title = m.promptItem.Title
 	}
-	b.WriteString(m.styles.Accent.Bold(true).Render(title))
-	b.WriteString("  ")
-	b.WriteString(m.styles.Muted.Render("esc"))
-	b.WriteString("\n")
-	b.WriteString(m.input.View() + "\n\n")
+	lines = append(lines,
+		m.styles.Accent.Bold(true).Render(title)+"  "+m.styles.Muted.Render("esc"),
+		m.input.View(),
+		"",
+	)
 
 	if m.promptItem != nil {
-		b.WriteString(m.styles.Muted.Render(m.promptItem.Description) + "\n")
+		lines = append(lines, m.styles.Muted.Render(m.promptItem.Description))
 	} else {
 		vis := m.visible()
 		if len(vis) == 0 {
-			b.WriteString(m.styles.Muted.Render("No commands match your search.") + "\n")
+			lines = append(lines, m.styles.Muted.Render("No commands match your search."))
 		} else {
 			capacity := max(1, m.height-4)
 			if m.status != "" {
 				capacity = max(1, capacity-1)
 			}
-			win := viewport.Grouped(len(vis), m.selected, capacity, func(i int) string { return groupKey(vis[i]) })
+			win := viewport.GroupedGaps(len(vis), m.selected, capacity, func(i int) string { return groupKey(vis[i]) })
 			cat, grp := "", ""
+			first := true
 			for idx := win.Start; idx < win.End; idx++ {
 				it := vis[idx]
 				if string(it.Category) != cat {
+					if !first {
+						lines = append(lines, "")
+					}
 					cat, grp = string(it.Category), ""
-					b.WriteString(m.styles.Accent.Bold(true).Render(cat) + "\n")
+					lines = append(lines, m.styles.Accent.Bold(true).Render(cat))
+					first = false
 				}
 				if it.Group != "" && it.Group != grp {
+					if !first {
+						lines = append(lines, "")
+					}
 					grp = it.Group
-					b.WriteString(m.styles.Muted.Render("  "+grp) + "\n")
+					lines = append(lines, m.styles.Muted.Render("  "+grp))
+					first = false
 				} else if it.Group == "" {
 					grp = ""
 				}
@@ -248,23 +256,23 @@ func (m Model) View() string {
 					row += "  " + keys
 				}
 				if idx == m.selected {
-					b.WriteString(m.styles.Panel.Render(m.styles.Text.Render("┃ "+row)) + "\n")
+					lines = append(lines, m.styles.Panel.Render(m.styles.Text.Render("┃ "+row)))
 				} else {
-					b.WriteString(m.styles.Muted.Render("  "+row) + "\n")
+					lines = append(lines, m.styles.Muted.Render("  "+row))
 				}
 			}
 		}
 	}
 	if m.status != "" {
-		b.WriteString(m.styles.Accent.Render(oneLine(m.status, max(20, m.width-4))) + "\n")
+		lines = append(lines, m.styles.Accent.Render(oneLine(m.status, max(20, m.width-4))))
 	}
+	// Pin the footer to the bottom of the frame.
 	footer := m.styles.Footer.Render(
 		m.styles.Accent.Bold(true).Render("enter") + m.styles.FooterText.Render(" select   ") +
 			m.styles.Accent.Bold(true).Render("↑/↓") + m.styles.FooterText.Render(" move   ") +
 			m.styles.FooterText.Render(itoa(len(m.visible()))+" commands"))
-	b.WriteString(footer)
-	_ = lipgloss.NewStyle
-	return b.String()
+	lines = append(lines, strings.Repeat("\n", max(0, m.height-len(lines)-1)), footer)
+	return strings.Join(lines, "\n")
 }
 
 func oneLine(s string, n int) string {

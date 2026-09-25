@@ -36,6 +36,35 @@ func Grouped(length, selected, capacity int, key func(i int) string) Window {
 	return Window{start, end}
 }
 
+// GroupedGaps is Grouped plus a blank gap line before every header except
+// the first rendered line (category + subgroup headings breathe).
+func GroupedGaps(length, selected, capacity int, key func(i int) string) Window {
+	cost := func(start, end int) int {
+		rows, prev, first := 0, "", true
+		for i := start; i < end; i++ {
+			cur := key(i)
+			if i == start || cur != prev {
+				if !first {
+					rows++ // gap before header
+				}
+				rows++ // header
+				first = false
+			}
+			rows++ // item
+			prev = cur
+		}
+		return rows
+	}
+	start := selected
+	for start > 0 && cost(start-1, selected+1) <= capacity {
+		start--
+	}
+	end := selected + 1
+	for end < length && cost(start, end+1) <= capacity {
+		end++
+	}
+	return Window{start, end}
+}
 func min(a, b int) int {
 	if a < b {
 		return a

@@ -12,8 +12,8 @@ command = ["go", "build", "-o", "herdr-palette", "."]
 id = "picker"
 title = "Herdr Palette"
 placement = "popup"
-width = "80%"
-height = 20
+width = "60%"
+height = "70%"
 command = ["./herdr-palette"]
 
 # Open the palette (shell binding so the popup pane can be opened directly):
