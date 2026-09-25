@@ -12,7 +12,7 @@ command = ["go", "build", "-o", "herdr-palette", "."]
 id = "picker"
 title = "Herdr Palette"
 placement = "popup"
-width = "60%"
+width = "50%"
 height = "70%"
 command = ["./herdr-palette"]
 

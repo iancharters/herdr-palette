@@ -36,3 +36,29 @@ func TestGroupedGapsCountsGapLines(t *testing.T) {
 		t.Fatalf("got %+v", got)
 	}
 }
+
+func TestGroupedAdvSkipsGapAfterCategory(t *testing.T) {
+	cats := []string{"Custom", "Custom"}
+	grps := []string{"a", "a"}
+	one := func(i int) int { return 1 }
+	cat := func(i int) string { return cats[i] }
+	grp := func(i int) string { return grps[i] }
+	// header + subheader (no gap between) + 2 items = 4 rows fits exactly
+	if got := GroupedAdv(2, 1, 4, cat, grp, one); got != (Window{0, 2}) {
+		t.Fatalf("got %+v", got)
+	}
+}
+
+func TestGroupedAdvVariableHeights(t *testing.T) {
+	cats := []string{"A", "A", "B"}
+	grps := []string{"", "", ""}
+	hs := []int{1, 3, 1}
+	cat := func(i int) string { return cats[i] }
+	grp := func(i int) string { return grps[i] }
+	h := func(i int) int { return hs[i] }
+	// rows: hdr(1) + item0(1) + item1(3) = 5 <= 6, so the window keeps
+	// the earlier rows: extending to item2 would add gap + hdr + item = 8 > 6.
+	if got := GroupedAdv(3, 1, 6, cat, grp, h); got != (Window{0, 2}) {
+		t.Fatalf("got %+v", got)
+	}
+}

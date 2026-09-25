@@ -276,66 +276,176 @@ func (m Model) View() string {
 		if len(vis) == 0 {
 			lines = append(lines, m.styles.Muted.Render("No commands match your search."))
 		} else {
-			capacity := max(1, m.height-4)
-			if m.status != "" {
-				capacity = max(1, capacity-1)
-			}
-			win := viewport.GroupedGaps(len(vis), m.selected, capacity, func(i int) string { return groupKey(vis[i]) })
-			// Fixed shortcut column so keybinds align: pad titles to the
-			// widest visible title (display width, not byte length).
-			titleW := 0
-			for _, it := range vis {
-				if w := runewidth.StringWidth(it.Title); w > titleW {
-					titleW = w
-				}
-			}
-			cat, grp := "", ""
-			afterHeader := false // last emitted line was a header: skip the gap
-			started := false     // any list line emitted yet (no gap before the first)
-			for idx := win.Start; idx < win.End; idx++ {
-				it := vis[idx]
-				if string(it.Category) != cat {
-					if started && !afterHeader {
-						lines = append(lines, "")
-					}
-					cat, grp = string(it.Category), ""
-					lines = append(lines, m.styles.Accent.Bold(true).Render(cat))
-					afterHeader, started = true, true
-				}
-				if it.Group != "" && it.Group != grp {
-					if !afterHeader {
-						lines = append(lines, "")
-					}
-					grp = it.Group
-					lines = append(lines, m.styles.Muted.Render("  "+grp))
-					afterHeader = true
-				} else if it.Group == "" {
-					grp = ""
-				}
-				icon := lipgloss.NewStyle().Width(3).Align(lipgloss.Center).Render(it.Icon)
-				row := icon + " " + padRight(it.Title, titleW)
-				if keys := strings.Join(it.Shortcuts, " / "); keys != "" {
-					row += "  " + keys
-				}
-				if idx == m.selected {
-					lines = append(lines, m.styles.Panel.Render(m.styles.Text.Render("┃ "+row)))
-				} else {
-					lines = append(lines, m.styles.Muted.Render("  "+row))
-				}
-				afterHeader = false
-			}
+			body := m.renderList(vis)
+			// Shrink-to-fit dialog: center the content block instead of
+			// stretching rows across the frame.
+			lines = append(lines, lipgloss.PlaceHorizontal(m.width, lipgloss.Center, strings.Join(body, "\n")))
 		}
 	}
 	if m.status != "" {
 		lines = append(lines, m.styles.Accent.Render(oneLine(m.status, max(20, m.width-4))))
 	}
-	// Pin the footer to the bottom of the frame.
+	// Pin the footer to the bottom of the frame. The centered body is one
+	// string element, so count its logical lines explicitly.
+	bodyCount := 0
+	for _, ln := range lines[3:] {
+		bodyCount += strings.Count(ln, "\n") + 1
+	}
 	footer := m.styles.Footer.Render(
 		m.styles.Accent.Bold(true).Render("enter") + m.styles.FooterText.Render(" select   ") +
 			m.styles.Accent.Bold(true).Render("↑/↓") + m.styles.FooterText.Render(" move   ") +
 			m.styles.FooterText.Render(itoa(len(m.visible()))+" commands"))
-	lines = append(lines, strings.Repeat("\n", max(0, m.height-len(lines)-1)), footer)
+	lines = append(lines, strings.Repeat("\n", max(0, m.height-3-bodyCount-1)), footer)
 	return strings.Join(lines, "\n")
+}
+
+// renderList builds the dialog body: grouped rows with wrapped titles and a
+// fixed keybind column aligned with each row's first line.
+func (m Model) renderList(vis []model.PaletteItem) []string {
+	frameInner := max(20, m.width-4)
+	maxKeys, maxTitle := 0, 0
+	keysOf := make([]string, len(vis))
+	for i, it := range vis {
+		keysOf[i] = strings.Join(it.Shortcuts, " / ")
+		if w := runewidth.StringWidth(keysOf[i]); w > maxKeys {
+			maxKeys = w
+		}
+		if w := runewidth.StringWidth(it.Title); w > maxTitle {
+			maxTitle = w
+		}
+	}
+	keysGap := 0
+	if maxKeys > 0 {
+		keysGap = 2
+	}
+	// icon cell (3) + space (1) + title + gap + keybinds must fit frameInner.
+	titleW := min(maxTitle, max(10, frameInner-4-1-keysGap-maxKeys))
+	tlines := make([][]string, len(vis))
+	for i, it := range vis {
+		tlines[i] = wrapText(it.Title, titleW)
+	}
+	capacity := max(1, m.height-4)
+	if m.status != "" {
+		capacity = max(1, capacity-1)
+	}
+	win := viewport.GroupedAdv(len(vis), m.selected, capacity,
+		func(i int) string { return string(vis[i].Category) },
+		func(i int) string { return vis[i].Group },
+		func(i int) int { return len(tlines[i]) })
+	body := []string{}
+	cat, grp := "", ""
+	afterHeader := false // last emitted line was a header: skip the gap
+	started := false     // any list line emitted yet (no gap before the first)
+	for idx := win.Start; idx < win.End; idx++ {
+		it := vis[idx]
+		if string(it.Category) != cat {
+			if started && !afterHeader {
+				body = append(body, "")
+			}
+			cat, grp = string(it.Category), ""
+			body = append(body, m.styles.Accent.Bold(true).Render(cat))
+			afterHeader, started = true, true
+		}
+		if it.Group != "" && it.Group != grp {
+			if !afterHeader {
+				body = append(body, "")
+			}
+			grp = it.Group
+			body = append(body, m.styles.Muted.Render("  "+grp))
+			afterHeader = true
+		} else if it.Group == "" {
+			grp = ""
+		}
+		icon := lipgloss.NewStyle().Width(3).Align(lipgloss.Center).Render(it.Icon)
+		sel := idx == m.selected
+		for li, tl := range tlines[idx] {
+			var row string
+			if li == 0 {
+				row = icon + " " + padRight(tl, titleW)
+				if keysOf[idx] != "" {
+					row += "  " + keysOf[idx]
+				}
+			} else {
+				row = "    " + padRight(tl, titleW)
+			}
+			if sel {
+				body = append(body, m.styles.Panel.Render(m.styles.Text.Render("┃ "+row)))
+			} else {
+				body = append(body, m.styles.Muted.Render("  "+row))
+			}
+		}
+		afterHeader = false
+	}
+	return body
+}
+
+// wrapText greedly wraps s to display width w, hard-splitting overlong words.
+// It is rune-width aware so CJK/wide glyphs wrap correctly.
+func wrapText(s string, w int) []string {
+	if w < 1 {
+		w = 1
+	}
+	if runewidth.StringWidth(s) <= w {
+		return []string{s}
+	}
+	splitWord := func(word string) []string {
+		var parts []string
+		var cur strings.Builder
+		curW := 0
+		for _, r := range word {
+			rw := runewidth.RuneWidth(r)
+			if rw > w {
+				rw = w
+			}
+			if curW+rw > w && curW > 0 {
+				parts = append(parts, cur.String())
+				cur.Reset()
+				curW = 0
+			}
+			cur.WriteRune(r)
+			curW += rw
+		}
+		if curW > 0 {
+			parts = append(parts, cur.String())
+		}
+		return parts
+	}
+	var lines []string
+	var cur strings.Builder
+	curW := 0
+	flush := func() {
+		if curW > 0 {
+			lines = append(lines, cur.String())
+			cur.Reset()
+			curW = 0
+		}
+	}
+	for _, word := range strings.Fields(s) {
+		if runewidth.StringWidth(word) > w {
+			flush()
+			lines = append(lines, splitWord(word)...)
+			continue
+		}
+		ww := runewidth.StringWidth(word)
+		add := ww
+		if curW > 0 {
+			add++
+		}
+		if curW+add > w {
+			flush()
+		}
+		if curW > 0 {
+			cur.WriteByte(' ')
+			curW++
+		}
+		cur.WriteString(word)
+		curW += ww
+	}
+	flush()
+	if len(lines) == 0 {
+		return []string{""}
+	}
+	return lines
 }
 
 // padRight pads s with spaces to display width w (rune-width aware).
