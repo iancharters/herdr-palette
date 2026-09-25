@@ -241,3 +241,88 @@ func WorktreeOpenArgv(workspaceID, input string) []string {
 	}
 	return []string{"worktree", "open", "--workspace", workspaceID, flag, v, "--focus"}
 }
+
+// ForegroundProc is one entry of pane process-info.
+type ForegroundProc struct {
+	Name string `json:"name"`
+	PID  int    `json:"pid"`
+}
+
+// ProcessInfo queries a pane's process state. Returns nil on any failure
+// (callers must treat nil as "unknown", i.e. busy — never type into it).
+func ProcessInfo(paneID string) []ForegroundProc {
+	res := RunHerdr("pane", "process-info", "--pane", paneID)
+	if res.Code != 0 {
+		return nil
+	}
+	return ParseProcessInfo(res.Stdout)
+}
+
+// ParseProcessInfo extracts foreground processes from process-info JSON.
+func ParseProcessInfo(stdout string) []ForegroundProc {
+	var env struct {
+		Result *struct {
+			Info *struct {
+				Procs []ForegroundProc `json:"foreground_processes"`
+			} `json:"process_info"`
+		} `json:"result"`
+	}
+	if json.Unmarshal([]byte(stdout), &env) != nil || env.Result == nil || env.Result.Info == nil {
+		return nil
+	}
+	return env.Result.Info.Procs
+}
+
+var shells = map[string]bool{
+	"sh": true, "bash": true, "dash": true, "zsh": true, "fish": true,
+	"nu": true, "nushell": true, "elvish": true, "xonsh": true, "xonsh.exe": true,
+	"powershell": true, "powershell.exe": true, "pwsh": true, "pwsh.exe": true,
+	"cmd": true, "cmd.exe": true,
+}
+
+// IsShell reports whether a pane is sitting at an interactive shell prompt.
+// procs==nil means unknown (query failed) → false: callers split instead of
+// typing into a possibly-running TUI. Empty means a fresh idle shell → true.
+func IsShell(procs []ForegroundProc) bool {
+	if procs == nil {
+		return false
+	}
+	for _, p := range procs {
+		if !shells[strings.ToLower(strings.TrimSpace(p.Name))] {
+			return false
+		}
+	}
+	return true
+}
+
+// SplitPane splits paneID vertically (right) and returns the new pane's id.
+func SplitPane(paneID string, focus bool) (string, string) {
+	args := []string{"pane", "split", paneID, "--direction", "right"}
+	if focus {
+		args = append(args, "--focus")
+	}
+	res := RunHerdr(args...)
+	if res.Code != 0 {
+		return "", Explain(res.Stderr, res.Code)
+	}
+	var env struct {
+		Result *struct {
+			Pane *struct {
+				PaneID string `json:"pane_id"`
+			} `json:"pane"`
+		} `json:"result"`
+	}
+	if json.Unmarshal([]byte(res.Stdout), &env) != nil || env.Result == nil || env.Result.Pane == nil || env.Result.Pane.PaneID == "" {
+		return "", "Herdr split the pane but did not report the new one."
+	}
+	return env.Result.Pane.PaneID, ""
+}
+
+// RunInPane runs a command in the given pane via its shell.
+func RunInPane(paneID string, argv ...string) string {
+	res := RunHerdr(append([]string{"pane", "run", paneID}, argv...)...)
+	if res.Code != 0 {
+		return Explain(res.Stderr, res.Code)
+	}
+	return ""
+}

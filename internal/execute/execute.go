@@ -2,6 +2,7 @@ package execute
 
 import (
 	"encoding/json"
+	"os"
 	"strings"
 	"time"
 
@@ -248,4 +249,78 @@ func itoa(n int) string {
 		b[i] = '-'
 	}
 	return string(b[i:])
+}
+
+// ExecuteInTerminal closes the palette and runs the item where the user can
+// see it: in the focused pane when it sits at a shell prompt, otherwise in a
+// fresh vertical split that takes focus. It never types into a running
+// process (unknown state splits too). Returns OK to quit the palette, or a
+// message to keep it open on the error.
+func ExecuteInTerminal(item model.PaletteItem, input string) model.CommandResult {
+	if item.Invocation.Kind == model.InvocationShortcut {
+		keys := strings.Join(item.Shortcuts, " / ")
+		if keys != "" {
+			return model.CommandResult{Message: "Press " + keys + " — Herdr only runs this one from the keyboard."}
+		}
+		return model.CommandResult{Message: "Herdr only runs this one from the keyboard."}
+	}
+	argv, msg := Resolve(item.Invocation, input)
+	if msg != "" {
+		return model.CommandResult{Message: msg}
+	}
+	target := herdr.SessionTarget()
+	if target == nil {
+		return model.CommandResult{Message: "Herdr did not report the pane that opened the palette."}
+	}
+	dest := target.PaneID
+	if !herdr.IsShell(herdr.ProcessInfo(target.PaneID)) {
+		id, fail := herdr.SplitPane(target.PaneID, true)
+		if fail != "" {
+			return model.CommandResult{Message: fail}
+		}
+		dest = id
+	}
+	if fail := herdr.RunInPane(dest, displayArgv(argv)...); fail != "" {
+		return model.CommandResult{Message: fail}
+	}
+	return model.CommandResult{OK: true}
+}
+
+// displayArgv maps resolved argv to what runs in the terminal: plugin actions
+// go through this binary's blocking `invoke` subcommand (streams the result
+// to the pane); plain herdr commands run as-is.
+func displayArgv(argv []string) []string {
+	if isPluginInvoke(argv) {
+		exe, err := os.Executable()
+		if err != nil || exe == "" {
+			exe = "herdr-palette"
+		}
+		return []string{exe, "invoke", argv[3]}
+	}
+	return append([]string{"herdr"}, argv...)
+}
+
+// Invoke runs one qualified plugin action id to completion, printing its
+// stdout. Used by the `invoke` subcommand for terminal-visible execution.
+func Invoke(qid string) (string, string, int) {
+	parts := strings.SplitN(qid, ".", 2)
+	if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
+		return "", "invoke needs a qualified <plugin_id>.<action_id>", 2
+	}
+	_ = parts
+	item := model.PaletteItem{
+		ID: qid, Title: qid,
+		Invocation: model.Invocation{Kind: model.InvocationHerdr, Argv: []string{"plugin", "action", "invoke", qid}},
+	}
+	res := invokePluginAction(qid, item.Invocation.Argv)
+	if res.Message != "" && !res.OK {
+		return res.Output, res.Message, 1
+	}
+	if res.Message != "" {
+		return res.Output, res.Message, 0
+	}
+	if !res.OK {
+		return res.Output, "action failed", 1
+	}
+	return res.Output, "", 0
 }

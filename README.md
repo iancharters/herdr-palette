@@ -8,6 +8,10 @@ Fuzzy command palette for [Herdr](https://herdr.dev), rebuilt in Go on
 * Auto-discovery of installed plugin actions via `herdr plugin action list`,
   subgrouped under `Custom` by plugin id. No per-plugin hardcoding.
 * Prompt-mode commands (rename, worktree open/remove) prompt inline.
+* Execution happens in the terminal, not the popup: the palette closes, then
+  runs the command in the focused pane when it sits at a shell prompt, or in
+  a fresh focused vertical split when the pane runs something (e.g. a TUI).
+  Plugin actions stream their output to that pane via `herdr-palette invoke`.
 * Theme follows the host terminal dynamically (termenv dark/light probe +
   adaptive colors); explicit Herdr `[theme]`/`[theme.custom]` hex overrides
   still win where set.
