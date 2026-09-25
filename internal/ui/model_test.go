@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"regexp"
 	"strings"
 	"testing"
 
@@ -66,5 +67,75 @@ func TestViewPinsFooterAndKeepsKeysOnFirstLine(t *testing.T) {
 	}
 	if !found {
 		t.Fatalf("keys not top-aligned:\n%s", view)
+	}
+}
+
+var ansiRe = regexp.MustCompile("\x1b\\[[0-9;]*m")
+
+func stripANSI(s string) string { return ansiRe.ReplaceAllString(s, "") }
+
+func TestRowsShareColumnOffsets(t *testing.T) {
+	items := []model.PaletteItem{
+		{ID: "a", Title: "New workspace", Category: "Workspace", Icon: "+", Shortcuts: []string{"prefix+shift+n"}, Invocation: model.Invocation{Kind: model.InvocationHerdr, Argv: []string{"x"}}},
+		{ID: "b", Title: "A much longer workspace title here", Category: "Workspace", Icon: "+", Invocation: model.Invocation{Kind: model.InvocationHerdr, Argv: []string{"y"}}},
+		{ID: "c", Title: "Close", Category: "Workspace", Icon: "x", Shortcuts: []string{"prefix+x"}, Invocation: model.Invocation{Kind: model.InvocationHerdr, Argv: []string{"z"}}},
+	}
+	m := New(items, theme.StylesFor(theme.PaletteTheme{}), func(it model.PaletteItem, _ string) model.CommandResult {
+		return model.CommandResult{OK: true}
+	})
+	updated, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 24})
+	m = updated.(Model)
+	type row struct {
+		line string
+		lead int // leading spaces
+	}
+	var rows []row
+	for _, r := range strings.Split(stripANSI(m.View()), "\n") {
+		if !strings.Contains(r, "workspace") && !strings.Contains(r, "Close") {
+			continue
+		}
+		// skip wrapped continuation lines (indented, no icon, no keys)
+		if !strings.Contains(r, "+") && !strings.Contains(r, "x") && !strings.Contains(r, "prefix") {
+			continue
+		}
+		lead := 0
+		for _, c := range r {
+			if c != ' ' {
+				break
+			}
+			lead++
+		}
+		rows = append(rows, row{r, lead})
+	}
+	if len(rows) < 3 {
+		t.Fatalf("want 3 first-line rows, got %d", len(rows))
+	}
+	// shared block offset = smallest indent (a selected row's ┃ marker
+	// occupies its first two cells, so its indent is the bare offset)
+	offset := rows[0].lead
+	for _, r := range rows[1:] {
+		if r.lead < offset {
+			offset = r.lead
+		}
+	}
+	keysX := -1
+	for _, r := range rows {
+		cells := []rune(r.line)
+		// icon sits after the 2-cell marker + 1 centering space, for all rows
+		if offset+3 >= len(cells) || cells[offset+3] == ' ' {
+			t.Fatalf("no icon at shared column in %q (offset %d)", r.line, offset)
+		}
+		if k := strings.Index(r.line, "prefix"); k >= 0 {
+			// byte index → display cells (┃ is 3 bytes in 1 cell)
+			kx := runewidth.StringWidth(r.line[:k])
+			if keysX < 0 {
+				keysX = kx
+			} else if kx != keysX {
+				t.Fatalf("keys x %d != %d in %q", kx, keysX, r.line)
+			}
+		}
+	}
+	if keysX < 0 {
+		t.Fatal("found no keybinds to compare")
 	}
 }
