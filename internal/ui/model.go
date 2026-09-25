@@ -8,6 +8,8 @@ import (
 
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
+	"github.com/mattn/go-runewidth"
 	"github.com/iancharters/herdr-palette/internal/model"
 	"github.com/iancharters/herdr-palette/internal/theme"
 	"github.com/iancharters/herdr-palette/internal/viewport"
@@ -120,15 +122,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		switch {
 		case key == "up" || key == "ctrl+p":
-			total := len(m.visible())
-			if total > 0 {
-				m.selected = (m.selected - 1 + total) % total
+			if m.selected > 0 {
+				m.selected--
 			}
 			return m, nil
 		case key == "down" || key == "ctrl+n":
-			total := len(m.visible())
-			if total > 0 {
-				m.selected = (m.selected + 1) % total
+			if m.selected < len(m.visible())-1 {
+				m.selected++
 			}
 			return m, nil
 		case contains(m.keys.Confirm, key):
@@ -227,32 +227,42 @@ func (m Model) View() string {
 				capacity = max(1, capacity-1)
 			}
 			win := viewport.GroupedGaps(len(vis), m.selected, capacity, func(i int) string { return groupKey(vis[i]) })
+			// Fixed shortcut column so keybinds align: pad labels to the
+			// widest visible label (display width, not byte length).
+			labelOf := func(it model.PaletteItem) string { return it.Icon + "  " + it.Title }
+			labelW := 0
+			for _, it := range vis {
+				if w := runewidth.StringWidth(labelOf(it)); w > labelW {
+					labelW = w
+				}
+			}
 			cat, grp := "", ""
-			first := true
+			afterHeader := false // last emitted line was a header: skip the gap
+			started := false     // any list line emitted yet (no gap before the first)
 			for idx := win.Start; idx < win.End; idx++ {
 				it := vis[idx]
 				if string(it.Category) != cat {
-					if !first {
+					if started && !afterHeader {
 						lines = append(lines, "")
 					}
 					cat, grp = string(it.Category), ""
 					lines = append(lines, m.styles.Accent.Bold(true).Render(cat))
-					first = false
+					afterHeader, started = true, true
 				}
 				if it.Group != "" && it.Group != grp {
-					if !first {
+					if !afterHeader {
 						lines = append(lines, "")
 					}
 					grp = it.Group
 					lines = append(lines, m.styles.Muted.Render("  "+grp))
-					first = false
+					afterHeader = true
 				} else if it.Group == "" {
 					grp = ""
 				}
-				label := it.Icon + "  " + it.Title
-				keys := strings.Join(it.Shortcuts, " / ")
-				row := label
-				if keys != "" {
+				icon := lipgloss.NewStyle().Width(3).Align(lipgloss.Center).Render(it.Icon)
+				label := labelOf(it)
+				row := icon + padRight(label, labelW)
+				if keys := strings.Join(it.Shortcuts, " / "); keys != "" {
 					row += "  " + keys
 				}
 				if idx == m.selected {
@@ -260,6 +270,7 @@ func (m Model) View() string {
 				} else {
 					lines = append(lines, m.styles.Muted.Render("  "+row))
 				}
+				afterHeader = false
 			}
 		}
 	}
@@ -273,6 +284,14 @@ func (m Model) View() string {
 			m.styles.FooterText.Render(itoa(len(m.visible()))+" commands"))
 	lines = append(lines, strings.Repeat("\n", max(0, m.height-len(lines)-1)), footer)
 	return strings.Join(lines, "\n")
+}
+
+// padRight pads s with spaces to display width w (rune-width aware).
+func padRight(s string, w int) string {
+	if pad := w - runewidth.StringWidth(s); pad > 0 {
+		return s + strings.Repeat(" ", pad)
+	}
+	return s
 }
 
 func oneLine(s string, n int) string {

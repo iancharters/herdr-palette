@@ -38,6 +38,9 @@ func Grouped(length, selected, capacity int, key func(i int) string) Window {
 
 // GroupedGaps is Grouped plus a blank gap line before every header except
 // the first rendered line (category + subgroup headings breathe).
+// Note: the renderer skips the gap when a subgroup directly follows its
+// category header, so this conservatively over-counts by one row per such
+// junction — safe underfill (the footer stays pinned, never pushed off).
 func GroupedGaps(length, selected, capacity int, key func(i int) string) Window {
 	cost := func(start, end int) int {
 		rows, prev, first := 0, "", true
