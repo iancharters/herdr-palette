@@ -227,13 +227,12 @@ func (m Model) View() string {
 				capacity = max(1, capacity-1)
 			}
 			win := viewport.GroupedGaps(len(vis), m.selected, capacity, func(i int) string { return groupKey(vis[i]) })
-			// Fixed shortcut column so keybinds align: pad labels to the
-			// widest visible label (display width, not byte length).
-			labelOf := func(it model.PaletteItem) string { return it.Icon + "  " + it.Title }
-			labelW := 0
+			// Fixed shortcut column so keybinds align: pad titles to the
+			// widest visible title (display width, not byte length).
+			titleW := 0
 			for _, it := range vis {
-				if w := runewidth.StringWidth(labelOf(it)); w > labelW {
-					labelW = w
+				if w := runewidth.StringWidth(it.Title); w > titleW {
+					titleW = w
 				}
 			}
 			cat, grp := "", ""
@@ -260,8 +259,7 @@ func (m Model) View() string {
 					grp = ""
 				}
 				icon := lipgloss.NewStyle().Width(3).Align(lipgloss.Center).Render(it.Icon)
-				label := labelOf(it)
-				row := icon + padRight(label, labelW)
+				row := icon + " " + padRight(it.Title, titleW)
 				if keys := strings.Join(it.Shortcuts, " / "); keys != "" {
 					row += "  " + keys
 				}
