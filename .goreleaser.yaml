@@ -1,0 +1,51 @@
+# GoReleaser: prebuilt binaries attached to GitHub releases.
+# The herdr manifest still builds from source (`go build`); these archives
+# are for users who prefer not to install a Go toolchain, and for the
+# future fetch-or-build install path. `goreleaser check` validates this file.
+version: 2
+
+project_name: herdr-palette
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - id: herdr-palette
+    binary: herdr-palette
+    main: .
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w
+
+archives:
+  - id: default
+    ids:
+      - herdr-palette
+    formats:
+      - tar.gz
+    format_overrides:
+      - goos: windows
+        formats:
+          - zip
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+
+checksum:
+  name_template: "{{ .ProjectName }}_{{ .Version }}_checksums.txt"
+  algorithm: sha256
+
+changelog:
+  sort: asc
+  use: github
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
