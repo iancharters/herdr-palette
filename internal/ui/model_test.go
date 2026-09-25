@@ -139,3 +139,32 @@ func TestRowsShareColumnOffsets(t *testing.T) {
 		t.Fatal("found no keybinds to compare")
 	}
 }
+
+func TestViewIsExactlyFrameHeight(t *testing.T) {
+	mkItems := func() []model.PaletteItem {
+		return []model.PaletteItem{
+			{ID: "a", Title: "New workspace", Category: "Workspace", Icon: "+", Shortcuts: []string{"prefix+shift+n"}, Invocation: model.Invocation{Kind: model.InvocationHerdr, Argv: []string{"x"}}},
+			{ID: "b", Title: "A much longer workspace title here that wraps", Category: "Workspace", Icon: "+", Invocation: model.Invocation{Kind: model.InvocationHerdr, Argv: []string{"y"}}},
+			{ID: "c", Title: "Close", Category: "Tabs", Icon: "x", Shortcuts: []string{"prefix+x"}, Invocation: model.Invocation{Kind: model.InvocationHerdr, Argv: []string{"z"}}},
+		}
+	}
+	newM := func() Model {
+		return New(mkItems(), theme.StylesFor(theme.PaletteTheme{}), func(it model.PaletteItem, _ string) model.CommandResult {
+			return model.CommandResult{OK: true}
+		})
+	}
+	for _, h := range []int{14, 24, 40} {
+		m := newM()
+		updated, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: h})
+		m = updated.(Model)
+		if n := len(strings.Split(m.View(), "\n")); n != h {
+			t.Fatalf("height %d: view has %d lines", h, n)
+		}
+		// empty-filter state too
+		m.query = "zzz-no-match"
+		m.input.SetValue("zzz-no-match")
+		if n := len(strings.Split(stripANSI(m.View()), "\n")); n != h {
+			t.Fatalf("height %d empty: view has %d lines", h, n)
+		}
+	}
+}

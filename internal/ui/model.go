@@ -265,7 +265,12 @@ func (m Model) View() string {
 		footer := m.styles.Footer.Render(
 			m.styles.Accent.Bold(true).Render("esc") + m.styles.FooterText.Render(" back   ") +
 				m.styles.Accent.Bold(true).Render("↑/↓") + m.styles.FooterText.Render(" scroll"))
-		lines = append(lines, strings.Repeat("\n", max(0, m.height-len(lines)-1)), footer)
+		// Blank-pad with individual lines: appending one multi-newline string
+		// would add a phantom row at Join time and push the frame a line tall.
+		for len(lines) < m.height-1 {
+			lines = append(lines, "")
+		}
+		lines = append(lines, footer)
 		return strings.Join(lines, "\n")
 	}
 
@@ -283,17 +288,16 @@ func (m Model) View() string {
 	if m.status != "" {
 		lines = append(lines, m.styles.Accent.Render(oneLine(m.status, max(20, m.width-4))))
 	}
-	// Pin the footer to the bottom of the frame. The centered body is one
-	// string element, so count its logical lines explicitly.
-	bodyCount := 0
-	for _, ln := range lines[3:] {
-		bodyCount += strings.Count(ln, "\n") + 1
-	}
+	// Pin the footer to the bottom of the frame with individual blank lines
+	// (one multi-newline element would add a phantom row at Join time).
 	footer := m.styles.Footer.Render(
 		m.styles.Accent.Bold(true).Render("enter") + m.styles.FooterText.Render(" select   ") +
 			m.styles.Accent.Bold(true).Render("↑/↓") + m.styles.FooterText.Render(" move   ") +
 			m.styles.FooterText.Render(itoa(len(m.visible()))+" commands"))
-	lines = append(lines, strings.Repeat("\n", max(0, m.height-3-bodyCount-1)), footer)
+	for len(lines) < m.height-1 {
+		lines = append(lines, "")
+	}
+	lines = append(lines, footer)
 	return strings.Join(lines, "\n")
 }
 
