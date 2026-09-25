@@ -49,3 +49,19 @@ func TestPrompted(t *testing.T) {
 		}
 	}
 }
+
+func TestIconsAreSingleCellSafe(t *testing.T) {
+	// Geometric block glyphs (U+25xx) render double-width in some terminals
+	// while arrows render single-width, which breaks icon column alignment.
+	// Icons must stay in the safe set: ASCII plus arrows/latin-1/×.
+	for _, it := range DefaultItems() {
+		for _, r := range it.Icon {
+			if r > 0x2500 && r < 0x2600 {
+				t.Fatalf("item %s icon %q is a geometric block glyph", it.ID, it.Icon)
+			}
+		}
+		if got := len([]rune(it.Icon)); got != 1 {
+			t.Fatalf("item %s icon %q is not one rune", it.ID, it.Icon)
+		}
+	}
+}

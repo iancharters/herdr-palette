@@ -52,7 +52,7 @@ func ToPaletteItems(actions []DiscoveredAction, shortcuts map[string]string) []m
 		}
 		out = append(out, model.PaletteItem{
 			ID: "plugin:" + qid, Title: title, Category: model.CategoryCustom, Group: a.PluginID,
-			Description: qid, Icon: "◆",
+			Description: qid, Icon: "*",
 			Aliases:     []string{qid, a.PluginID, a.ActionID},
 			Shortcuts:   sc,
 			Invocation:  model.Invocation{Kind: model.InvocationHerdr, Argv: []string{"plugin", "action", "invoke", qid}},
