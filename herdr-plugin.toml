@@ -1,0 +1,27 @@
+id = "iancharters.herdr-palette"
+name = "Herdr Palette (Go)"
+version = "0.1.0"
+min_herdr_version = "0.7.0"
+description = "Fuzzy command palette for Herdr: built-in commands plus auto-discovered plugin actions, themed from the host terminal."
+platforms = ["linux", "macos"]
+
+[[build]]
+command = ["go", "build", "-o", "herdr-palette", "."]
+
+[[panes]]
+id = "picker"
+title = "Herdr Palette"
+placement = "popup"
+width = "80%"
+height = 20
+command = ["./herdr-palette"]
+
+# Open the palette (shell binding so the popup pane can be opened directly):
+#
+#   [[keys.command]]
+#   key = "ctrl+space"
+#   type = "shell"
+#   command = "\"$HERDR_BIN_PATH\" plugin pane open --plugin iancharters.herdr-palette --entrypoint picker"
+#   description = "Open Herdr Palette"
+#
+# Then `herdr server reload-config`.
