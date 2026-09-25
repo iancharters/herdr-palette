@@ -297,10 +297,6 @@ func (m Model) View() string {
 	return strings.Join(lines, "\n")
 }
 
-// titleColMax is the widest the title column gets before wrapping. It covers
-// every built-in title single-line; only outlier plugin titles wrap.
-const titleColMax = 28
-
 // renderList builds the dialog body: grouped rows with wrapped titles and a
 // fixed keybind column aligned with each row's first line. The whole block
 // shares one left offset (centered), so columns stay aligned across rows of
@@ -323,9 +319,9 @@ func (m Model) renderList(vis []model.PaletteItem) []string {
 		keysGap = 2
 	}
 	// icon cell (3) + space (1) + title + gap + keybinds must fit frameInner.
-	// The title column is additionally capped so one long outlier cannot
-	// stretch every row; longer titles wrap instead.
-	titleW := min(min(maxTitle, titleColMax), max(10, frameInner-4-1-keysGap-maxKeys))
+	// The column grows to fit the longest visible title and only wraps when
+	// text would exceed the frame — never capped below available space.
+	titleW := min(maxTitle, max(10, frameInner-4-1-keysGap-maxKeys))
 	tlines := make([][]string, len(vis))
 	for i, it := range vis {
 		tlines[i] = wrapText(it.Title, titleW)
